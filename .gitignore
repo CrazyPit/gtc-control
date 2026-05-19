@@ -1,0 +1,44 @@
+# Build output
+/target
+
+# Local scratch / ephemeral notes (per CLAUDE.md convention)
+/tmp
+/.context
+
+# Agent-generated analysis docs that are not part of the project's documented
+# story (CLAUDE.md, README.md). Anything else at the root is treated as
+# ephemeral.
+/NOTES.md
+/PLAN.md
+/ANALYSIS.md
+/SCRATCH.md
+/DESIGN.md
+/SESSION
+/.claude
+
+# IDE & editor noise
+/.idea
+/.vscode
+*.iml
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment overrides — secrets must never be checked in
+.env
+.env.local
+.env.*.local
+
+# Optional: per-user Cargo overrides (we DO commit .cargo/config.toml for
+# shared aliases; ignore only the per-user file if it ever exists)
+.cargo/config.toml.user
+
+# Vendor PDFs — copyrighted by GTC. Keep locally as a reference but
+# do not redistribute. The curated transcriptions in docs/*.md are
+# what the public repository carries.
+docs/*.pdf

@@ -1,0 +1,66 @@
+[package]
+name = "gtc-control"
+version = "0.1.0"
+edition = "2024"
+description = "Terminal controller for GTC Oasis ventilation units over Modbus TCP. CLI subcommands plus a full-screen interactive TUI."
+license = "MIT"
+publish = false
+repository = "https://github.com/CrazyPit/gtc-control"
+
+[lib]
+name = "gtc_control"
+path = "src/lib.rs"
+
+[[bin]]
+name = "GTC_Control"
+path = "src/main.rs"
+
+[lints.rust]
+warnings = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "deny"
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+# Allowed: we intentionally use module-level error types per CLAUDE.md.
+module_name_repetitions = "allow"
+# Allowed: tokio / serde / clap transitive trees occasionally pin several
+# versions of small utility crates; not our problem to police.
+multiple_crate_versions = "allow"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio-modbus = { version = "0.16", default-features = false, features = ["tcp"] }
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_norway = "0.9"
+dirs = "5"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ratatui = "0.30"
+crossterm = { version = "0.29", features = ["event-stream"] }
+futures-util = { version = "0.3", default-features = false }
+
+[dev-dependencies]
+proptest = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "sync", "test-util"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

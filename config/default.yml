@@ -1,0 +1,207 @@
+# GTC_Control — bundled configuration.
+#
+# Compiled into the binary via `include_str!` and parsed once at
+# startup. There is no user-editable copy on disk; edit this file
+# in-tree and rebuild to change endpoint or register catalogue.
+#
+# Register addresses below mirror docs/Oasis_Registers.md. All addresses
+# are zero-based wire addresses (documented register number minus 1).
+# This convention has been verified on a real controller (firmware
+# 5.1.0): wire address 0 returns 0x5100, the firmware version word.
+#
+# Notes on display_name and group:
+#   - `display_name` is the human label shown in the interactive UI.
+#     The non-interactive CLI (`poll`, `read`, `list`) keeps using the
+#     raw `name` field for stability.
+#   - `group` is the section heading. The interactive UI's "Status"
+#     panel pulls the well-known names (firmware_version, state_word_0,
+#     state_word_1, error_code, error_code_aux) into a decoded view; the
+#     `group` only affects the remaining sections (Temperatures, Fans,
+#     Filters, …).
+
+modbus:
+  host: 192.168.169.102
+  port: 502
+  unit_id: 1
+  timeout_ms: 1500
+
+poll:
+  interval_seconds: 5
+
+# UI preferences — every entry is editable interactively from the
+# Settings screen (`s` key) and persisted back to
+# ~/.gtc-control/config.yml on close. Missing keys default to `true`.
+ui:
+  temperatures:
+    supply_air_temp: true
+    return_water_temp: true
+    outdoor_temp: true
+    room_temp: true
+    recuperator_outlet_temp: true
+  modes:
+    heating: true
+    cooling: true
+    climate: true
+  exhaust_fan: true
+
+registers:
+  # ---- Identity / well-known state registers ----
+  # These five register names are recognised by the TUI's status
+  # decoder. Renaming any of them disables the decoded view for that
+  # register but leaves the raw value visible.
+  - name: firmware_version
+    display_name: "Firmware version"
+    kind: input
+    address: 0
+    value: u16
+    group: Identity
+  - name: state_word_0
+    display_name: "Device state word 0"
+    kind: input
+    address: 2
+    value: u16
+    group: State
+  - name: state_word_1
+    display_name: "Device state word 1"
+    kind: input
+    address: 3
+    value: u16
+    group: State
+  - name: error_code
+    display_name: "Active error mask"
+    kind: input
+    address: 4
+    value: u16
+    group: State
+  - name: error_code_aux
+    display_name: "Auxiliary error mask"
+    kind: input
+    address: 5
+    value: u16
+    group: State
+
+  # ---- Temperatures (signed × 10, °C) ----
+  - name: supply_air_temp
+    display_name: "Supply air"
+    kind: input
+    address: 7
+    value: temperature_x10
+    unit: "°C"
+    group: Temperatures
+  - name: return_water_temp
+    display_name: "Return water"
+    kind: input
+    address: 8
+    value: temperature_x10
+    unit: "°C"
+    group: Temperatures
+  - name: outdoor_temp
+    display_name: "Outdoor"
+    kind: input
+    address: 11
+    value: temperature_x10
+    unit: "°C"
+    group: Temperatures
+  - name: room_temp
+    display_name: "Room"
+    kind: input
+    address: 74
+    value: temperature_x10
+    unit: "°C"
+    group: Temperatures
+  - name: recuperator_outlet_temp
+    display_name: "Recuperator outlet"
+    kind: input
+    address: 76
+    value: temperature_x10
+    unit: "°C"
+    group: Temperatures
+
+  # ---- Fans ----
+  - name: fan_speed_supply_current
+    display_name: "Supply fan"
+    kind: input
+    address: 25
+    value: u16
+    group: Fans
+  - name: fan_speed_exhaust_current
+    display_name: "Exhaust fan"
+    kind: input
+    address: 30
+    value: u16
+    group: Fans
+
+  # ---- Filters ----
+  - name: filter1_contamination
+    display_name: "Filter 1"
+    kind: input
+    address: 14
+    value: percent
+    unit: "%"
+    group: Filters
+  - name: filter2_contamination
+    display_name: "Filter 2"
+    kind: input
+    address: 84
+    value: percent
+    unit: "%"
+    group: Filters
+
+  # ---- Controllable registers ------------------------------------------
+  # Writable holding registers — exposed both to the TUI (edit-in-place)
+  # and to the CLI (`GTC_Control set <name> <value>`). The TUI maps
+  # these specific names to its edit UI; renaming them disables the
+  # corresponding control row.
+  #
+  # Power_Dev — bit 0 = on (1) / off (0). Bits 1..15 reserved. The TUI
+  # writes the full word as 0 or 1.
+  - name: power
+    display_name: "Power"
+    kind: holding
+    address: 2
+    value: u16
+    writable: true
+    group: Controls
+  # Dev_Keys_2 — packed configuration word. The TUI exposes only bits
+  # 0..1 (Mode_System): 1=Heating, 2=Cooling, 3=Auto.
+  # EEPROM-backed; bits 2..15 hold humidifier/CO₂/pump flags and are
+  # preserved by the read-modify-write path in `app::set_value` when
+  # value type is `mode`.
+  - name: mode_system
+    display_name: "Mode"
+    kind: holding
+    address: 86
+    value: mode
+    writable: true
+    group: Controls
+  # Temp_Target — air-out setpoint, raw range 150..=300 (15.0–30.0 °C).
+  # The temperature_x10 value type handles the ×10 scaling on set.
+  - name: temp_setpoint
+    display_name: "Temperature setpoint"
+    kind: holding
+    address: 31
+    value: temperature_x10
+    writable: true
+    unit: "°C"
+    group: Controls
+  # Fan_Target_1 — supply-fan speed setpoint. Effective range depends
+  # on the unit's fan-control wiring (Fan_Type_1, holding 0x11):
+  #   discrete  → 1..=3
+  #   binary    → 1..=7
+  #   analog    → 1..=10
+  # The TUI clamps to 0..=10; the controller rejects out-of-range values.
+  - name: fan_speed_supply
+    display_name: "Supply fan setpoint"
+    kind: holding
+    address: 32
+    value: u16
+    writable: true
+    group: Controls
+  # Fan_Target_2 — exhaust-fan setpoint (firmware 5.0+).
+  - name: fan_speed_exhaust
+    display_name: "Exhaust fan setpoint"
+    kind: holding
+    address: 33
+    value: u16
+    writable: true
+    group: Controls

@@ -1,0 +1,7 @@
+[alias]
+lint = "clippy --all-targets --all-features"
+deps-unused = "machete"
+
+# Strict audit mode. Add advisories that affect only transitive branches we
+# cannot patch ourselves to the ignore list, with a comment per ignore.
+audit-strict = "audit --deny warnings"
