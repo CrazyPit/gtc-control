@@ -18,6 +18,13 @@ use crate::domain::{
 };
 use crate::modbus::{ModbusClient, ModbusError};
 
+/// Registers whose setpoint must never be written as `0`. The GTC
+/// unit accepts `0` (= fan off) at the bus level, but with the
+/// heater stage powered this starves the heat exchanger of airflow
+/// and can burn it out within seconds. Enforced for both CLI and
+/// TUI write paths.
+const FAN_SETPOINT_REGISTERS: &[&str] = &["fan_speed_supply", "fan_speed_exhaust"];
+
 /// Errors raised by [`poll_once`], [`read_one`], and [`set_value`].
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -51,6 +58,17 @@ pub enum AppError {
         /// Underlying conversion error.
         #[source]
         source: ValueConversionError,
+    },
+    /// A safety guard refused the write. Surfaced for combinations
+    /// the device firmware accepts but which can damage the unit —
+    /// notably fan setpoints of zero, which can leave the heater
+    /// running without airflow and burn it out.
+    #[error("refused write to `{name}`: {reason}")]
+    Refused {
+        /// Register name the write targeted.
+        name: String,
+        /// Human-readable explanation of the safety rule.
+        reason: &'static str,
     },
     /// Bubbled-up Modbus transport / protocol error.
     #[error("modbus error: {0}")]
@@ -143,6 +161,12 @@ pub async fn set_value(
                     name: name.to_owned(),
                     source,
                 })?;
+            if word == 0 && FAN_SETPOINT_REGISTERS.contains(&name) {
+                return Err(AppError::Refused {
+                    name: name.to_owned(),
+                    reason: "fan setpoint of 0 can burn the heater — minimum is 1",
+                });
+            }
             let final_word = match def.value_type {
                 // `Mode` carries only bits 0..1 of a packed
                 // configuration register; the remaining 14 bits hold
@@ -395,6 +419,63 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(client.holding.get(&3).copied(), Some(60));
+    }
+
+    fn fan_setpoint_def(name: &str, address: u16) -> RegisterDef {
+        RegisterDef {
+            name: name.into(),
+            kind: RegisterKind::Holding,
+            address,
+            value_type: RegisterValueType::U16,
+            writable: true,
+            unit: None,
+            group: Some("Controls".into()),
+            display_name: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn set_value_refuses_zero_supply_fan() {
+        let mut client = FakeModbusClient::new();
+        let registers = vec![fan_setpoint_def("fan_speed_supply", 32)];
+        let err = set_value(&mut client, &registers, "fan_speed_supply", "0")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Refused { .. }));
+        assert!(!client.holding.contains_key(&32));
+    }
+
+    #[tokio::test]
+    async fn set_value_refuses_zero_exhaust_fan() {
+        let mut client = FakeModbusClient::new();
+        let registers = vec![fan_setpoint_def("fan_speed_exhaust", 33)];
+        let err = set_value(&mut client, &registers, "fan_speed_exhaust", "0")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Refused { .. }));
+        assert!(!client.holding.contains_key(&33));
+    }
+
+    #[tokio::test]
+    async fn set_value_accepts_minimum_fan_speed() {
+        let mut client = FakeModbusClient::new();
+        let registers = vec![fan_setpoint_def("fan_speed_supply", 32)];
+        set_value(&mut client, &registers, "fan_speed_supply", "1")
+            .await
+            .unwrap();
+        assert_eq!(client.holding.get(&32).copied(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn set_value_zero_allowed_for_non_fan_registers() {
+        // Power_Dev bit 0 = 0 must remain writable — that is how the
+        // unit is turned off.
+        let mut client = FakeModbusClient::new();
+        let registers = vec![fan_setpoint_def("power", 2)];
+        set_value(&mut client, &registers, "power", "0")
+            .await
+            .unwrap();
+        assert_eq!(client.holding.get(&2).copied(), Some(0));
     }
 
     fn mode_def() -> RegisterDef {

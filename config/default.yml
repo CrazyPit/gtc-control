@@ -189,7 +189,9 @@ registers:
   #   discrete  → 1..=3
   #   binary    → 1..=7
   #   analog    → 1..=10
-  # The TUI clamps to 0..=10; the controller rejects out-of-range values.
+  # Both the TUI and `app::set_value` enforce a minimum of 1: writing
+  # 0 here can leave the heater running without airflow and burn it
+  # out within seconds. Use Power_Dev to turn the unit off.
   - name: fan_speed_supply
     display_name: "Supply fan setpoint"
     kind: holding

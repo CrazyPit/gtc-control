@@ -209,6 +209,15 @@ follows (lint policy, layering, testing, comment policy).
   `wb-mqtt-serial` + `wb-rules`, including the read-modify-write
   pattern needed for the mode register.
 
+## Safety guards
+
+- **Fan setpoint floor of 1.** Writing `0` to `fan_speed_supply` or
+  `fan_speed_exhaust` is rejected by both the CLI (`AppError::Refused`)
+  and the TUI (range validator). The controller accepts `0` at the
+  bus level but with the heater stage on the lack of airflow burns
+  the heat exchanger out within seconds. Use `power` to turn the
+  unit off.
+
 ## Known caveats
 
 - **EM-LAN module: one TCP slot at a time.** The Ethernet module

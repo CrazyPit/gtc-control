@@ -261,7 +261,10 @@ impl ControlId {
     fn range(self) -> (f32, f32) {
         match self {
             Self::Setpoint => (15.0, 30.0),
-            Self::SupplyFan | Self::ExhaustFan => (0.0, 10.0),
+            // Fan setpoints must never be `0`: an unfanned heater
+            // burns out within seconds. Enforced symmetrically in
+            // `app::set_value` for the CLI path.
+            Self::SupplyFan | Self::ExhaustFan => (1.0, 10.0),
             Self::Power | Self::Mode => (0.0, 1.0),
         }
     }
@@ -2080,9 +2083,29 @@ mod tests {
     }
 
     #[test]
+    fn validate_buffer_rejects_zero_fan_setpoint() {
+        // Safety: zero fan speed with the heater on burns out the heat
+        // exchanger. The TUI must refuse the value at edit time and the
+        // CLI must refuse the underlying write — see
+        // `app::set_value_refuses_zero_supply_fan`.
+        assert!(validate_buffer(ControlId::SupplyFan, "0").is_err());
+        assert!(validate_buffer(ControlId::ExhaustFan, "0").is_err());
+    }
+
+    #[test]
     fn validate_buffer_accepts_in_range() {
         assert!(validate_buffer(ControlId::Setpoint, "22.5").is_ok());
-        assert!(validate_buffer(ControlId::SupplyFan, "0").is_ok());
+        assert!(validate_buffer(ControlId::SupplyFan, "1").is_ok());
         assert!(validate_buffer(ControlId::SupplyFan, "10").is_ok());
+    }
+
+    #[test]
+    fn apply_step_clamps_fan_to_minimum_one() {
+        let mut buf = EditBuffer {
+            control: ControlId::SupplyFan,
+            text: "1".into(),
+        };
+        apply_step(&mut buf, -1.0);
+        assert_eq!(buf.text, "1", "stepping down at the minimum must stay at 1");
     }
 }
